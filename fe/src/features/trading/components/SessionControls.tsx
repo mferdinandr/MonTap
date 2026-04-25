@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTapToTrade } from '@/features/trading/contexts/TapToTradeContext';
 import { useBinaryOrders, BinaryOrder } from '@/features/trading/hooks/useBinaryOrders';
+import { useAccount } from 'wagmi';
 
 const COLLATERAL_PRESETS = [1, 5, 10] as const;
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
@@ -173,7 +174,8 @@ function WhaleRow({ whale, isNew }: { whale: WhaleBet; isNew: boolean }) {
 // ── Main component ─────────────────────────────────────────────────────────
 
 export default function SessionControls() {
-  const { isActive, setIsActive, collateralPerTap, setCollateralPerTap } = useTapToTrade();
+  const { isActive, setIsActive, collateralPerTap, setCollateralPerTap, sessionKey, isCreatingSession, createSession, clearSession } = useTapToTrade();
+  const { address } = useAccount();
   const { orders: myOrders, isLoading } = useBinaryOrders();
   const [, tick] = useState(0);
 
@@ -247,15 +249,33 @@ export default function SessionControls() {
           />
         </div>
         <button
-          onClick={() => setIsActive(!isActive)}
-          className={`w-full py-2 rounded font-semibold text-sm transition-all ${
+          disabled={isCreatingSession}
+          onClick={async () => {
+            if (isActive) {
+              clearSession();
+            } else {
+              if (!address) return;
+              const ok = await createSession(address as `0x${string}`);
+              if (ok) setIsActive(true);
+            }
+          }}
+          className={`w-full py-2 rounded font-semibold text-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
             isActive
               ? 'bg-red-600 hover:bg-red-700 text-white'
               : 'bg-violet-600 hover:bg-violet-700 text-white'
           }`}
         >
-          {isActive ? 'Stop Trading' : 'Start Trading'}
+          {isCreatingSession
+            ? 'Creating session…'
+            : isActive
+            ? 'Stop Trading'
+            : 'Start Trading'}
         </button>
+        {sessionKey && (
+          <p className="text-[10px] text-green-400 text-center">
+            Session active · expires {new Date(sessionKey.expiresAt).toLocaleTimeString()}
+          </p>
+        )}
       </div>
 
       {/* Scrollable body */}

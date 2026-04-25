@@ -6,6 +6,7 @@ import { BetScanner } from './services/BetScanner';
 import { PriceWatcher } from './services/PriceWatcher';
 import { createBetsRouter } from './routes/bets';
 import { createPricesRouter } from './routes/prices';
+import sessionRouter, { createFaucetRouter } from './routes/session';
 import { Logger } from './utils/Logger';
 import { PriceUpdate } from './types';
 
@@ -32,6 +33,8 @@ export function createServer(services: Services): http.Server {
   // REST routes
   app.use('/api/one-tap', createBetsRouter(scanner));
   app.use('/api', createPricesRouter(priceWatcher));
+  app.use('/api/session', sessionRouter);
+  app.use('/api/faucet', createFaucetRouter());
 
   const server = http.createServer(app);
 
