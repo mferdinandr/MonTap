@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   PRICE_BANDS,
@@ -44,6 +44,11 @@ export default function TradingGrid({ currentPrice, activeBets = [] }: TradingGr
   const { placeBet, isPending } = usePlaceBet();
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [placingCell, setPlacingCell] = useState<string | null>(null);
+  const [multiTap, setMultiTap] = useState(false);
+
+  // Drag-to-bet state (refs to avoid re-renders)
+  const isDraggingRef = useRef(false);
+  const draggedCellsRef = useRef<Set<string>>(new Set());
 
   // Tick every second for countdown timers
   useEffect(() => {
@@ -59,7 +64,7 @@ export default function TradingGrid({ currentPrice, activeBets = [] }: TradingGr
 
   const handleCellClick = useCallback(
     async (direction: 'UP' | 'DOWN', bandIndex: number, bucketIndex: number) => {
-      if (!isActive || isPending || currentPrice === 0) return;
+      if (!isActive || currentPrice === 0) return;
       const key = cellKey(direction, bandIndex, bucketIndex);
       setPlacingCell(key);
 
@@ -75,15 +80,50 @@ export default function TradingGrid({ currentPrice, activeBets = [] }: TradingGr
           expirySeconds,
           expectedMultiplier,
         });
-        if (tx) toast.success(`Bet placed! ${formatMultiplier(expectedMultiplier)} on ${asset}`);
+        if (tx) toast.success(`Bet! ${formatMultiplier(expectedMultiplier)} ${direction} ${asset}`);
       } catch (err: any) {
         toast.error(err?.message || 'Failed to place bet');
       } finally {
         setPlacingCell(null);
       }
     },
-    [isActive, isPending, currentPrice, currentPriceBigInt, asset, collateralPerTap, placeBet],
+    [isActive, currentPrice, currentPriceBigInt, asset, collateralPerTap, placeBet],
   );
+
+  const handleCellMouseDown = useCallback(
+    (direction: 'UP' | 'DOWN', bandIndex: number, bucketIndex: number) => {
+      if (!multiTap || !isActive) return;
+      isDraggingRef.current = true;
+      draggedCellsRef.current = new Set();
+      const key = cellKey(direction, bandIndex, bucketIndex);
+      draggedCellsRef.current.add(key);
+      handleCellClick(direction, bandIndex, bucketIndex);
+    },
+    [multiTap, isActive, handleCellClick],
+  );
+
+  const handleCellMouseEnter = useCallback(
+    (direction: 'UP' | 'DOWN', bandIndex: number, bucketIndex: number) => {
+      if (!multiTap || !isDraggingRef.current) return;
+      const key = cellKey(direction, bandIndex, bucketIndex);
+      if (draggedCellsRef.current.has(key)) return;
+      draggedCellsRef.current.add(key);
+      handleCellClick(direction, bandIndex, bucketIndex);
+    },
+    [multiTap, handleCellClick],
+  );
+
+  // Stop drag on mouseup anywhere
+  useEffect(() => {
+    const stop = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        draggedCellsRef.current = new Set();
+      }
+    };
+    window.addEventListener('mouseup', stop);
+    return () => window.removeEventListener('mouseup', stop);
+  }, []);
 
   const renderCell = (direction: 'UP' | 'DOWN', bandIndex: number, bucketIndex: number) => {
     const multiplier = MULTIPLIER_TABLE[bandIndex][bucketIndex];
@@ -107,14 +147,17 @@ export default function TradingGrid({ currentPrice, activeBets = [] }: TradingGr
     return (
       <button
         key={key}
-        onClick={() => handleCellClick(direction, bandIndex, bucketIndex)}
-        disabled={!isActive || isPending}
+        onClick={() => !multiTap && handleCellClick(direction, bandIndex, bucketIndex)}
+        onMouseDown={() => handleCellMouseDown(direction, bandIndex, bucketIndex)}
+        onMouseEnter={() => handleCellMouseEnter(direction, bandIndex, bucketIndex)}
+        disabled={!isActive}
         className={`
           relative flex flex-col items-center justify-center p-2 rounded border text-center
-          transition-all duration-150 cursor-pointer select-none
+          transition-all duration-150 select-none
+          ${isActive ? 'cursor-pointer' : 'cursor-not-allowed'}
           ${baseColor}
           ${activeBet ? `${activeColor} shadow-md animate-pulse` : ''}
-          ${!isActive ? 'opacity-40 cursor-not-allowed' : ''}
+          ${!isActive ? 'opacity-40' : ''}
           ${isPlacing ? 'opacity-70 scale-95' : ''}
           min-h-[56px]
         `}
@@ -137,7 +180,22 @@ export default function TradingGrid({ currentPrice, activeBets = [] }: TradingGr
   };
 
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="w-full overflow-x-auto" style={{ userSelect: multiTap ? 'none' : undefined }}>
+      {/* Multi-tap toggle */}
+      <div className="flex items-center justify-end px-1 pb-1">
+        <button
+          onClick={() => setMultiTap((v) => !v)}
+          className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+            multiTap
+              ? 'bg-violet-600 text-white'
+              : 'bg-zinc-800 text-slate-400 hover:text-white'
+          }`}
+          title="Drag across cells to place multiple bets"
+        >
+          <span>{multiTap ? '⚡' : '⚡'}</span>
+          Multi-tap {multiTap ? 'ON' : 'OFF'}
+        </button>
+      </div>
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr>

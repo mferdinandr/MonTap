@@ -18,6 +18,7 @@ export interface PerSecondChartProps {
     entryTime: number,
   ) => void;
   isPlacingBet?: boolean;
+  multiTapEnabled?: boolean;
   logoUrl?: string; // URL for the coin logo
   // Grid configuration props
   gridIntervalSeconds?: number;

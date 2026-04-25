@@ -21,6 +21,7 @@ const PerSecondChart: React.FC<PerSecondChartProps> = ({
   tradeMode = 'one-tap-profit',
   onCellClick,
   isPlacingBet = false,
+  multiTapEnabled = false,
   activeBets = [],
   logoUrl,
   gridIntervalSeconds = DEFAULT_GRID_X_SECONDS,
@@ -128,6 +129,7 @@ const PerSecondChart: React.FC<PerSecondChartProps> = ({
     isPlacingBet,
     isBinaryTradingEnabled,
     isInteractionLocked,
+    multiTapEnabled,
     resolveCellFromPoint: (point) => resolveCellFromPointRef.current?.(point) ?? null,
     onCellClick,
     onCellPress: (_x, _y) => {

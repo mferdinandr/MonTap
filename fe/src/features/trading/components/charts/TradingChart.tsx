@@ -30,7 +30,7 @@ const TradingChart: React.FC = () => {
     contextActiveMarket?.symbol || baseMarkets[0].symbol,
   );
 
-  const { isActive, collateralPerTap } = useTapToTrade();
+  const { isActive, collateralPerTap, multiTapEnabled } = useTapToTrade();
   const { placeBet, isPending } = usePlaceBet();
   const { currentBalance, pnlDollar, pnlPercent } = usePortfolioPnL();
 
@@ -220,6 +220,7 @@ const TradingChart: React.FC = () => {
             betAmount={collateralPerTap.toString()}
             isBinaryTradingEnabled={isActive}
             isPlacingBet={isPending}
+            multiTapEnabled={multiTapEnabled}
             logoUrl={activeMarket.logoUrl}
             tradeMode="one-tap-profit"
             showXAxis={true}

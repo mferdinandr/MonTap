@@ -58,6 +58,9 @@ interface TapToTradeContextType {
   isCreatingSession: boolean;
   createSession: (traderAddress: `0x${string}`) => Promise<boolean>;
   clearSession: () => void;
+
+  multiTapEnabled: boolean;
+  setMultiTapEnabled: (v: boolean) => void;
 }
 
 const TapToTradeContext = createContext<TapToTradeContextType | undefined>(undefined);
@@ -68,6 +71,7 @@ export const TapToTradeProvider: React.FC<{ children: ReactNode }> = ({ children
   const [collateralPerTap, setCollateralPerTap] = useState(10);
   const [sessionKey, setSessionKey] = useState<SessionKey | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [multiTapEnabled, setMultiTapEnabled] = useState(false);
 
   const { signMessageAsync } = useSignMessage();
   const { writeContractAsync } = useWriteContract();
@@ -164,6 +168,8 @@ export const TapToTradeProvider: React.FC<{ children: ReactNode }> = ({ children
         isCreatingSession,
         createSession,
         clearSession,
+        multiTapEnabled,
+        setMultiTapEnabled,
       }}
     >
       {children}

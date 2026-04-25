@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { PricePoint } from '../types';
 import { DEFAULT_GRID_X_SECONDS } from '../constants';
@@ -14,6 +14,7 @@ interface UseChartInteractionProps {
   isPlacingBet: boolean;
   isBinaryTradingEnabled?: boolean;
   isInteractionLocked?: boolean;
+  multiTapEnabled?: boolean;
   resolveCellFromPoint?: (point: { x: number; y: number }) => string | null;
   onCellClick?: (
     targetPrice: number,
@@ -39,6 +40,7 @@ export const useChartInteraction = ({
   isPlacingBet,
   isBinaryTradingEnabled = true,
   isInteractionLocked = false,
+  multiTapEnabled = false,
   resolveCellFromPoint,
   onCellClick,
   onCellPress,
@@ -55,6 +57,7 @@ export const useChartInteraction = ({
   const [hasMoved, setHasMoved] = useState(false);
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  const multiTapVisitedRef = useRef<Set<string>>(new Set());
 
   const GRID_X_SECONDS = gridIntervalSeconds;
 
@@ -83,8 +86,25 @@ export const useChartInteraction = ({
       setDragStartY(e.clientY);
       setDragStartScrollOffset(scrollOffset);
       setDragStartVerticalOffset(verticalOffset);
+      multiTapVisitedRef.current = new Set();
+
+      // Multi-tap: immediately bet + highlight the cell under the initial click
+      if (multiTapEnabled && isBinaryTradingEnabled && point && resolveCellFromPoint && onCellClick) {
+        const cell = resolveCellFromPoint(point);
+        if (cell) {
+          multiTapVisitedRef.current.add(cell);
+          setSelectedCells((prev) => new Set(prev).add(cell));
+
+          const [timestampStr, priceLevelStr] = cell.split('_');
+          const gridStartTime = parseInt(timestampStr);
+          const gridBottomPrice = parseFloat(priceLevelStr);
+          const targetTime = gridStartTime + GRID_X_SECONDS;
+          const targetPrice = gridBottomPrice + gridYDollars / 2;
+          onCellClick(targetPrice, targetTime, 0, gridStartTime);
+        }
+      }
     },
-    [getCanvasPoint, scrollOffset, verticalOffset],
+    [getCanvasPoint, scrollOffset, verticalOffset, multiTapEnabled, isBinaryTradingEnabled, resolveCellFromPoint, onCellClick, GRID_X_SECONDS, gridYDollars],
   );
 
   const handleMouseMove = useCallback(
@@ -94,6 +114,28 @@ export const useChartInteraction = ({
 
       if (isDragging) {
         e.preventDefault();
+
+        // Multi-tap mode: trigger bet on each new cell entered during drag
+        if (multiTapEnabled && isBinaryTradingEnabled && point && resolveCellFromPoint && onCellClick) {
+          const cell = resolveCellFromPoint(point);
+          if (cell && !multiTapVisitedRef.current.has(cell)) {
+            multiTapVisitedRef.current.add(cell);
+            setHasMoved(true);
+
+            // Highlight cell immediately (purple selected color)
+            setSelectedCells((prev) => new Set(prev).add(cell));
+
+            const [timestampStr, priceLevelStr] = cell.split('_');
+            const gridStartTime = parseInt(timestampStr);
+            const gridBottomPrice = parseFloat(priceLevelStr);
+            const targetTime = gridStartTime + GRID_X_SECONDS;
+            const targetPrice = gridBottomPrice + gridYDollars / 2;
+            const entryPrice =
+              priceHistory.length > 0 ? priceHistory[priceHistory.length - 1].price : currentPrice;
+            onCellClick(targetPrice, targetTime, entryPrice, gridStartTime);
+          }
+          return; // don't scroll in multi-tap mode
+        }
 
         const deltaX = dragStartX - e.clientX;
         const deltaY = dragStartY - e.clientY;
@@ -110,6 +152,10 @@ export const useChartInteraction = ({
     },
     [
       isDragging,
+      multiTapEnabled,
+      isBinaryTradingEnabled,
+      resolveCellFromPoint,
+      onCellClick,
       dragStartX,
       dragStartY,
       dragStartScrollOffset,
@@ -117,6 +163,10 @@ export const useChartInteraction = ({
       setIsFocusMode,
       isInteractionLocked,
       getCanvasPoint,
+      priceHistory,
+      currentPrice,
+      GRID_X_SECONDS,
+      gridYDollars,
     ],
   );
 

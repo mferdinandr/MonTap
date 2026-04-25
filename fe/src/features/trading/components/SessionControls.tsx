@@ -174,7 +174,7 @@ function WhaleRow({ whale, isNew }: { whale: WhaleBet; isNew: boolean }) {
 // ── Main component ─────────────────────────────────────────────────────────
 
 export default function SessionControls() {
-  const { isActive, setIsActive, collateralPerTap, setCollateralPerTap, sessionKey, isCreatingSession, createSession, clearSession } = useTapToTrade();
+  const { isActive, setIsActive, collateralPerTap, setCollateralPerTap, sessionKey, isCreatingSession, createSession, clearSession, multiTapEnabled, setMultiTapEnabled } = useTapToTrade();
   const { address } = useAccount();
   const { orders: myOrders, isLoading } = useBinaryOrders();
   const [, tick] = useState(0);
@@ -276,6 +276,23 @@ export default function SessionControls() {
             Session active · expires {new Date(sessionKey.expiresAt).toLocaleTimeString()}
           </p>
         )}
+
+        {/* Multi-tap toggle — always visible */}
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-[11px] text-slate-400">⚡ Multi-tap drag</span>
+          <button
+            onClick={() => setMultiTapEnabled(!multiTapEnabled)}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+              multiTapEnabled ? 'bg-violet-600' : 'bg-zinc-700'
+            }`}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                multiTapEnabled ? 'translate-x-4' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
       </div>
 
       {/* Scrollable body */}

@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import {
   useWriteContract,
   useReadContract,
   useAccount,
   usePublicClient,
 } from 'wagmi';
-import { createWalletClient, http, maxUint256, keccak256, toBytes, parseUnits } from 'viem';
+import { createWalletClient, createPublicClient, http, maxUint256, keccak256, toBytes, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { TAP_BET_MANAGER_ADDRESS, USDC_ADDRESS } from '@/config/contracts';
 import { useTapToTrade } from '@/features/trading/contexts/TapToTradeContext';
@@ -87,6 +87,11 @@ export function usePlaceBet() {
   const [isPlacing, setIsPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Nonce manager — shared init promise prevents race condition on rapid bets
+  const sessionNonceRef = useRef<number | null>(null);
+  const lastSessionKeyRef = useRef<string | null>(null);
+  const nonceFetchingRef = useRef<Promise<number> | null>(null);
+
   const { writeContractAsync } = useWriteContract();
 
   // Allowance check for the connected wallet (fallback path)
@@ -116,7 +121,27 @@ export function usePlaceBet() {
       try {
         const account = privateKeyToAccount(sessionKey.privateKey);
         const transport = http(process.env.NEXT_PUBLIC_RPC_URL);
+        const sessionPublicClient = createPublicClient({ chain: MONAD_TESTNET, transport });
         const sessionClient = createWalletClient({ account, chain: MONAD_TESTNET, transport });
+
+        // Reset nonce tracking when session key changes
+        if (lastSessionKeyRef.current !== sessionKey.address) {
+          lastSessionKeyRef.current = sessionKey.address;
+          sessionNonceRef.current = null;
+          nonceFetchingRef.current = null;
+        }
+
+        // Atomic nonce init — if two bets race here, both await the same promise
+        if (sessionNonceRef.current === null) {
+          if (!nonceFetchingRef.current) {
+            nonceFetchingRef.current = sessionPublicClient
+              .getTransactionCount({ address: account.address, blockTag: 'pending' })
+              .then((n) => { sessionNonceRef.current = n; return n; })
+              .finally(() => { nonceFetchingRef.current = null; });
+          }
+          await nonceFetchingRef.current;
+        }
+        const nonce = sessionNonceRef.current!++;
 
         // Session key calls placeBetFor — USDC pulled from trader's wallet (already approved)
         const tx = await sessionClient.writeContract({
@@ -125,11 +150,15 @@ export function usePlaceBet() {
           functionName: 'placeBetFor',
           args: [sessionKey.trader, symbolBytes32, params.targetPrice, entryPrice, collateral, expiry, BigInt(params.expectedMultiplier)],
           gas: 500000n,
+          nonce,
         });
 
         setIsPlacing(false);
         return tx;
       } catch (err: unknown) {
+        // Reset nonce so next bet re-fetches from chain (in case of revert/dropped tx)
+        sessionNonceRef.current = null;
+        nonceFetchingRef.current = null;
         setIsApproving(false);
         setIsPlacing(false);
         throw err; // re-throw so TradingGrid's catch shows toast.error
